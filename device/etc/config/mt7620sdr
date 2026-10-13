@@ -1,0 +1,21 @@
+# Configuration for the MT7620 capture node.
+#
+# It is disabled by default on purpose: a capture stops TX/RX on the radio, and
+# that behaviour has not been confirmed on real silicon yet. Flip enabled to 1
+# once you have run one capture by hand and seen the radio survive it.
+
+config mt7620sdr 'node'
+	option enabled 0
+
+	# Interface and channel. The rt2800 driver owns the RF, so the node tunes
+	# by bringing wlan0 up and setting the channel; the capture itself only
+	# reads the ADC. ch1 = 2412 MHz, ch6 = 2437, ch11 = 2462.
+	option interface 'wlan0'
+	option channel '6'
+
+	# Where the agent listens for the host (host/mt7620cap.py --tcp NODE:PORT).
+	option port '5555'
+
+	# The debugfs node the capture module exposes.
+	option source '/sys/kernel/debug/mt7620sdr/capture'
+	option module 'mt7620sdr_capture'

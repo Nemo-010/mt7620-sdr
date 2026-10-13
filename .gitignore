@@ -1,0 +1,12 @@
+build/
+out/
+kmod/*.o
+kmod/*.ko
+kmod/*.mod
+kmod/*.mod.c
+kmod/.*.cmd
+kmod/modules.order
+kmod/Module.symvers
+kmod/mt7620agent
+__pycache__/
+*.pyc

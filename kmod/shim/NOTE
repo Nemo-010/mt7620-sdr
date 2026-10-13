@@ -1,0 +1,6 @@
+/*
+ * The kernel build cannot see <stdint.h>/<stddef.h> (the kernel is built with
+ * -nostdinc), and core/capture.h includes them. These two shims satisfy those
+ * includes with the kernel's own types so core/capture.c can be compiled into
+ * the module completely unchanged.
+ */

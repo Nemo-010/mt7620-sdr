@@ -1,0 +1,55 @@
+#!/bin/sh
+# mt7620sdr-node - turn the box into a standalone capture node.
+#
+# Brings the capture module up, tunes the radio through the rt2800 driver, and
+# hands off to mt7620agent, which serves capture records on a TCP port for the
+# host (host/mt7620cap.py, or the ZMQ front end in host/mt7620cap.grc).
+#
+# The RF is only ever touched through the driver: the capture reads the ADC and
+# does not program the synthesiser. Tuning therefore means "bring wlan0 up and
+# set the channel", which is why this needs no vendor code.
+set -eu
+
+. /lib/functions.sh
+
+config_load mt7620sdr
+config_get IFACE   node interface wlan0
+config_get CHANNEL node channel   6
+config_get PORT    node port      5555
+config_get SOURCE  node source    /sys/kernel/debug/mt7620sdr/capture
+config_get MODULE  node module    mt7620sdr_capture
+
+log() { logger -t mt7620sdr "$*"; echo "mt7620sdr: $*" >&2; }
+
+KV=$(uname -r)
+
+# 1. capture module
+if ! grep -q "^${MODULE}[[:space:]]" /proc/modules 2>/dev/null; then
+	if ! insmod "$MODULE" 2>/dev/null \
+	   && ! insmod "/lib/modules/${KV}/${MODULE}.ko" 2>/dev/null; then
+		log "cannot load ${MODULE} (is it in /lib/modules/${KV}/?)"
+		exit 1
+	fi
+fi
+
+# 2. debugfs must be mounted for the capture node to exist
+if [ ! -d /sys/kernel/debug ]; then
+	mount -t debugfs none /sys/kernel/debug 2>/dev/null || true
+fi
+if [ ! -e "$SOURCE" ]; then
+	log "no capture node at ${SOURCE}"
+	exit 1
+fi
+
+# 3. tune through the driver
+ip link set "$IFACE" up 2>/dev/null || true
+if ! iw dev "$IFACE" set channel "$CHANNEL" 2>/dev/null; then
+	if ! iwconfig "$IFACE" channel "$CHANNEL" 2>/dev/null; then
+		log "warning: could not set ${IFACE} to channel ${CHANNEL}"
+	fi
+fi
+log "tuned ${IFACE} to channel ${CHANNEL}"
+
+# 4. serve captures
+log "serving capture records on :${PORT}"
+exec mt7620agent -s "$SOURCE" -l "$PORT"
