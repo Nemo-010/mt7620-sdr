@@ -205,6 +205,35 @@ static int test_restore_after_success(void)
 	return 0;
 }
 
+static int test_trace(void)
+{
+	static struct mt7620_sample out[MT7620_CAPTURE_SAMPLES * MT7620_CAPTURE_CHAINS];
+	struct mt7620_capture_trace tr;
+	unsigned n = 0;
+
+	memset(mem, 0, sizeof(mem));
+	memset(&tr, 0, sizeof(tr));
+	never_complete = 0;
+
+	if (mt7620_capture_ex(&mock_io, out, &n, &tr) != 0) {
+		fprintf(stderr, "FAIL: traced capture errored\n");
+		return 1;
+	}
+	if (!(tr.pbf_sys_ctrl_read & MT7620_PBF_SYS_CTRL_CAP_MODE)) {
+		fprintf(stderr, "FAIL: CAP_MODE did not read back set\n");
+		return 1;
+	}
+	if (tr.timed_out) {
+		fprintf(stderr, "FAIL: trace reports timeout on a good capture\n");
+		return 1;
+	}
+	if (tr.cap_ctrl_final & MT7620_CAP_START) {
+		fprintf(stderr, "FAIL: CAP_START still set in the trace\n");
+		return 1;
+	}
+	return 0;
+}
+
 int main(void)
 {
 	int rc = 0;
@@ -218,6 +247,8 @@ int main(void)
 	else                        printf("  guards: ok\n");
 	if (test_restore_after_success()) { fprintf(stderr, "  restore: FAIL\n"); rc = 1; }
 	else                        printf("  register restore after success: ok\n");
+	if (test_trace())               { fprintf(stderr, "  trace: FAIL\n"); rc = 1; }
+	else                        printf("  trace: ok (CAP_MODE sticks, no timeout)\n");
 
 	if (rc == 0)
 		printf("PASS\n");

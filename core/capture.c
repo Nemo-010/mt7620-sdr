@@ -17,8 +17,8 @@ static void restore(struct mt7620_io *io, uint32_t mac_sys, uint32_t pbf_sys,
 	io->write32(io->ctx, MT7620_MAC_SYS_CTRL, mac_sys);
 }
 
-int mt7620_capture(struct mt7620_io *io, struct mt7620_sample *out,
-		   unsigned *nsamples)
+int mt7620_capture_ex(struct mt7620_io *io, struct mt7620_sample *out,
+		      unsigned *nsamples, struct mt7620_capture_trace *tr)
 {
 	uint32_t mac_sys, pbf_sys, cap_orig, cap, start, smm, pkt;
 	unsigned i, k;
@@ -39,6 +39,10 @@ int mt7620_capture(struct mt7620_io *io, struct mt7620_sample *out,
 	/* Enter capture mode, source = ADC8 (the normal receive path). */
 	io->write32(io->ctx, MT7620_PBF_SYS_CTRL,
 		    pbf_sys | MT7620_PBF_SYS_CTRL_CAP_MODE);
+	if (tr) {
+		tr->pbf_sys_ctrl_set = pbf_sys | MT7620_PBF_SYS_CTRL_CAP_MODE;
+		tr->pbf_sys_ctrl_read = io->read32(io->ctx, MT7620_PBF_SYS_CTRL);
+	}
 	cap &= ~(MT7620_CAP_SRC_ADC8 | MT7620_CAP_ADC6 | MT7620_CAP_OFFSET_MASK);
 	io->write32(io->ctx, MT7620_PBF_CAP_CTRL, cap);
 
@@ -48,11 +52,18 @@ int mt7620_capture(struct mt7620_io *io, struct mt7620_sample *out,
 
 	/* Wait for the buffer to fill: CAP_START clears when it is full. */
 	for (i = 0; i < 1000; i++) {
-		if (!(io->read32(io->ctx, MT7620_PBF_CAP_CTRL) & MT7620_CAP_START)) {
+		cap = io->read32(io->ctx, MT7620_PBF_CAP_CTRL);
+		if (!(cap & MT7620_CAP_START)) {
 			done = 1;
 			break;
 		}
 		io->delay_us(io->ctx, 10);
+	}
+	if (tr) {
+		tr->polls = i;
+		tr->timed_out = !done;
+		tr->cap_ctrl_final = cap;
+		tr->start_addr = cap & MT7620_CAP_START_MASK;
 	}
 
 	io->write32(io->ctx, MT7620_MAC_SYS_CTRL, 0);
@@ -99,4 +110,10 @@ int mt7620_capture(struct mt7620_io *io, struct mt7620_sample *out,
 
 	*nsamples = MT7620_CAPTURE_SAMPLES;
 	return 0;
+}
+
+int mt7620_capture(struct mt7620_io *io, struct mt7620_sample *out,
+		   unsigned *nsamples)
+{
+	return mt7620_capture_ex(io, out, nsamples, NULL);
 }

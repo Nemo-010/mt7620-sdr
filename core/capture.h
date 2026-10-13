@@ -29,6 +29,24 @@ struct mt7620_sample {
 };
 
 /*
+ * Optional record of what the hardware actually did. Filled in by
+ * mt7620_capture_ex() when a non-NULL pointer is passed.
+ *
+ * This exists to separate "the ADC never ran" from "we decoded it wrong". If
+ * CAP_MODE does not read back set, capture mode never took effect and the two
+ * capture windows are just ordinary MAC memory, whatever bytes happen to be in
+ * them.
+ */
+struct mt7620_capture_trace {
+	uint32_t pbf_sys_ctrl_set;	/* value written, with CAP_MODE */
+	uint32_t pbf_sys_ctrl_read;	/* read back immediately after */
+	unsigned polls;			/* poll iterations before completion */
+	int      timed_out;		/* CAP_START never cleared */
+	uint32_t cap_ctrl_final;	/* PBF_CAP_CTRL when the poll ended */
+	uint32_t start_addr;		/* cap_ctrl_final & 0x1fff */
+};
+
+/*
  * Capture one full buffer. `out` must hold MT7620_CAPTURE_SAMPLES *
  * MT7620_CAPTURE_CHAINS entries, laid out as
  *     out[sample * MT7620_CAPTURE_CHAINS + chain]
@@ -37,5 +55,9 @@ struct mt7620_sample {
  */
 int mt7620_capture(struct mt7620_io *io, struct mt7620_sample *out,
 		   unsigned *nsamples);
+
+/* Same, but also reports what the hardware did. `tr` may be NULL. */
+int mt7620_capture_ex(struct mt7620_io *io, struct mt7620_sample *out,
+		      unsigned *nsamples, struct mt7620_capture_trace *tr);
 
 #endif /* MT7620_CAPTURE_H */

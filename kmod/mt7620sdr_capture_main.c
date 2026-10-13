@@ -57,6 +57,11 @@ static u64 mt7620sdr_seq;
 static unsigned int captures_ok;
 static unsigned int captures_failed;
 
+/* What the hardware did during the last capture, for /trace. */
+static struct mt7620_capture_trace last_trace;
+static u32 pre_regs[4];		/* mac_sys, pbf_sys, pbf_cfg, cap_ctrl */
+static char trace_buf[768];
+
 static unsigned int rate_hz = MT7620_RATE_HZ_DEFAULT;
 module_param(rate_hz, uint, 0444);
 MODULE_PARM_DESC(rate_hz, "sample rate advertised to the host (Hz)");
@@ -118,7 +123,13 @@ static int mt7620sdr_open(struct inode *inode, struct file *file)
 		goto out_unlock;
 	}
 
-	ret = mt7620_capture(&io, samples, &nsamples);
+	pre_regs[0] = io.read32(&ctx, MT7620_MAC_SYS_CTRL);
+	pre_regs[1] = io.read32(&ctx, MT7620_PBF_SYS_CTRL);
+	pre_regs[2] = io.read32(&ctx, MT7620_PBF_CFG);
+	pre_regs[3] = io.read32(&ctx, MT7620_PBF_CAP_CTRL);
+
+	memset(&last_trace, 0, sizeof(last_trace));
+	ret = mt7620_capture_ex(&io, samples, &nsamples, &last_trace);
 	if (ret) {
 		captures_failed++;
 		pr_warn("mt7620sdr: capture failed (%d)\n", ret);
@@ -199,6 +210,42 @@ static const struct file_operations mt7620sdr_fops = {
 	.llseek = default_llseek,
 };
 
+/*
+ * /trace: the one file that says whether the capture engine ran. If CAP_MODE
+ * does not read back set, capture mode never took effect and the two capture
+ * windows are just ordinary MAC memory.
+ */
+static ssize_t mt7620sdr_trace_read(struct file *file, char __user *ubuf,
+				    size_t count, loff_t *ppos)
+{
+	const struct mt7620_capture_trace *t = &last_trace;
+	int n;
+
+	n = scnprintf(trace_buf, sizeof(trace_buf),
+		"before  mac_sys_ctrl 0x%08x  pbf_sys_ctrl 0x%08x\n"
+		"        pbf_cfg      0x%08x  cap_ctrl     0x%08x\n"
+		"wrote   pbf_sys_ctrl 0x%08x (cap_mode bit14 = %d)\n"
+		"readbk  pbf_sys_ctrl 0x%08x (cap_mode bit14 = %d)\n"
+		"polls   %u   timed_out %d\n"
+		"final   cap_ctrl     0x%08x   start addr 0x%03x\n"
+		"counts  ok %u  failed %u\n",
+		pre_regs[0], pre_regs[1], pre_regs[2], pre_regs[3],
+		t->pbf_sys_ctrl_set,
+		!!(t->pbf_sys_ctrl_set & MT7620_PBF_SYS_CTRL_CAP_MODE),
+		t->pbf_sys_ctrl_read,
+		!!(t->pbf_sys_ctrl_read & MT7620_PBF_SYS_CTRL_CAP_MODE),
+		t->polls, t->timed_out,
+		t->cap_ctrl_final, t->start_addr, captures_ok, captures_failed);
+
+	return simple_read_from_buffer(ubuf, count, ppos, trace_buf, n);
+}
+
+static const struct file_operations mt7620sdr_trace_fops = {
+	.owner = THIS_MODULE,
+	.read = mt7620sdr_trace_read,
+	.llseek = default_llseek,
+};
+
 static int __init mt7620sdr_init(void)
 {
 	mt7620sdr_base = ioremap(MT7620_WMAC_PHYS, MT7620_WMAC_SIZE);
@@ -213,6 +260,8 @@ static int __init mt7620sdr_init(void)
 
 	debugfs_create_file("capture", 0444, mt7620sdr_dir, NULL,
 			    &mt7620sdr_fops);
+	debugfs_create_file("trace", 0444, mt7620sdr_dir, NULL,
+			    &mt7620sdr_trace_fops);
 	debugfs_create_u32("captures_ok", 0444, mt7620sdr_dir, &captures_ok);
 	debugfs_create_u32("captures_failed", 0444, mt7620sdr_dir,
 			   &captures_failed);
