@@ -1,5 +1,12 @@
 #include "capture.h"
 
+/*
+ * The vendor allows up to 3 seconds for the buffer to fill. On hardware this
+ * took ~785 poll iterations once (~8 ms), and a later capture exceeded 1000 and
+ * was wrongly reported as a failure, so the budget is generous.
+ */
+#define POLL_LIMIT 4000u
+
 static void put(struct mt7620_sample *out, unsigned s, unsigned c,
 		int8_t i, int8_t q)
 {
@@ -51,7 +58,7 @@ int mt7620_capture_ex(struct mt7620_io *io, struct mt7620_sample *out,
 	io->write32(io->ctx, MT7620_MAC_SYS_CTRL, MT7620_MAC_ENABLE_RX);
 
 	/* Wait for the buffer to fill: CAP_START clears when it is full. */
-	for (i = 0; i < 1000; i++) {
+	for (i = 0; i < POLL_LIMIT; i++) {
 		cap = io->read32(io->ctx, MT7620_PBF_CAP_CTRL);
 		if (!(cap & MT7620_CAP_START)) {
 			done = 1;

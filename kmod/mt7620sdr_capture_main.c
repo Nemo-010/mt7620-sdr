@@ -132,6 +132,15 @@ static int mt7620sdr_open(struct inode *inode, struct file *file)
 	ret = mt7620_capture_ex(&io, samples, &nsamples, &last_trace);
 	if (ret) {
 		captures_failed++;
+		/*
+		 * The core returns -1 for a fill timeout and -2 for bad arguments.
+		 * A bare -1 reaches userspace as -EPERM ("Operation not permitted"),
+		 * which sent us chasing a permissions problem that never existed.
+		 */
+		if (ret == -1)
+			ret = -ETIMEDOUT;
+		else if (ret == -2)
+			ret = -EINVAL;
 		pr_warn("mt7620sdr: capture failed (%d)\n", ret);
 		goto out_free_samples;
 	}
