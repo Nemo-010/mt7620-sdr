@@ -21,6 +21,8 @@ command. That is enough for a toy SDR.
 | [`docs/05-openwrt.md`](docs/05-openwrt.md) | OpenWrt, mainline rt2x00 vs vendor driver, QEMU |
 | [`docs/06-verified-artifacts.md`](docs/06-verified-artifacts.md) | everything below that was actually built and run |
 | [`docs/07-node.md`](docs/07-node.md) | running the box as a standalone node, and the PC side |
+| [`docs/08-first-capture.md`](docs/08-first-capture.md) | the first capture that returned real samples |
+| [`docs/09-bringup-log.md`](docs/09-bringup-log.md) | how it got there, including the dead ends |
 | `include/mt7620_pbf.h` | register and buffer-layout reference |
 | `core/capture.c` | one capture, portable, IO-vtable based |
 | `core/capture_test.c` | mock-hardware test of the sequence and decode |
@@ -31,6 +33,7 @@ command. That is enough for a toy SDR.
 | `host/mt7620cap.grc` | GNU Radio receiver (ZMQ SUB → frequency + waterfall) |
 | `tools/build-target.sh` | build the `.ko` and the agent with an OpenWrt SDK |
 | `tools/build-image.sh` | assemble a flashable, LuCI-free image |
+| `tools/score-capture.sh` | tell real samples from unwritten SRAM (run this first) |
 | `openwrt/` | board build seed |
 
 ## Build and test the core
